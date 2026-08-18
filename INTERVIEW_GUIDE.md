@@ -1,329 +1,86 @@
 # Interview Guide — E-Commerce Customer Intelligence Analysis
 
-## 1. 60-second project explanation
+## 1. 60-second explanation
 
-> I worked on an end-to-end e-commerce customer analytics project where the goal was to understand customer purchasing behavior and identify the main revenue and business drivers. I started with around 3,900 transaction records in CSV format and used Python with Pandas for data cleaning and feature engineering. I handled missing review ratings using category-level median imputation, standardized the column names, created age groups, converted purchase frequency into approximate days, and segmented customers using their previous purchase history. I then used SQL to answer business questions around category revenue, top products, subscription behavior, discount effectiveness, shipping, seasonality and customer segments. Finally, I used Power BI to turn the analysis into an interactive dashboard with executive KPIs and customer/product views. The main objective was to move from raw transaction data to actionable recommendations for retention, promotions and product strategy.
+> I built an end-to-end e-commerce customer intelligence project to understand where revenue is concentrated, which customer-history segments matter, how promotions behave, and which products combine sales scale with customer ratings. I started with 3,900 shopping records and used Python with Pandas for data-quality checks, category-level median imputation, column standardization and feature engineering. I created behavioral customer segments from previous purchase history, quartile-based transaction value tiers, and promotion audiences combining discount and subscription status. I then used SQL for repeatable business analysis, including revenue-share calculations, CTEs, subqueries, percentile-based tiers and window functions to rank products within each category. Power BI is the presentation layer, where the analysis is organized into executive, customer and product/promotion views.
 
-## 2. Project workflow
-
-```text
-Raw CSV
-   ↓
-Python / Pandas
-   ↓
-Data Cleaning
-   ↓
-Feature Engineering
-   ↓
-Exploratory Analysis
-   ↓
-PostgreSQL / SQL
-   ↓
-Business Questions
-   ↓
-Power BI
-   ↓
-Insights & Recommendations
-```
-
-## 3. Dataset explanation
-
-The supplied dataset has:
+## 2. Dataset
 - 3,900 records
 - 18 original columns
+- Demographics: age, gender, location
+- Product: item, category, size, color
+- Transaction: purchase amount, season, shipping, payment
+- Customer behavior: previous purchases, frequency, subscription
+- Promotion: discount and promo-code fields
+- Rating: review rating
 
-Important columns:
-- `customer_id` — identifier
-- `age`, `gender` — demographics
-- `item_purchased`, `category` — product information
-- `purchase_amount` — transaction value
-- `location`, `season` — context
-- `review_rating` — customer rating
-- `subscription_status` — subscription indicator
-- `shipping_type` — delivery method
-- `discount_applied` — discount flag
-- `previous_purchases` — historical purchase count
-- `payment_method`
-- `frequency_of_purchases`
+## 3. Cleaning
+**Missing ratings:** 37 values were missing. I used the median rating within each category rather than one global median.
 
-## 4. Why Python?
+**Column names:** standardized to snake_case to make Python/SQL code consistent.
 
-Python/Pandas was used for:
-- loading the CSV
-- understanding the schema
-- checking missing values
-- cleaning columns
-- feature engineering
-- exploratory summaries
+**Promo field:** `promo_code_used` is redundant with the discount signal for this dataset, so it is removed from the cleaned analytical dataframe.
 
-Python is useful because it is flexible for data preparation and can automate repetitive analysis.
-
-## 5. Why did you use median imputation?
-
-There were missing values in `review_rating`.
-
-Instead of filling every missing value with one global median, I used the median rating of the corresponding product category.
-
-Why?
-
-Because different categories can have different rating distributions. Category-level imputation preserves more of the local structure of the data and is less likely to distort a category's typical rating.
-
-## 6. Why standardize column names?
-
-Original names contained spaces, capitalization and special characters.
-
-For example:
-
-`Purchase Amount (USD)`
-
-became:
-
-`purchase_amount`
-
-This makes Python and SQL queries easier to write, reduces syntax problems and gives the dataset a consistent naming convention.
-
-## 7. Explain age groups
-
-I created four business-friendly age groups:
-
-- Young Adult
-- Adult
-- Middle-aged
-- Senior
-
-The purpose is to make demographic analysis easier to interpret than working with individual ages.
-
-## 8. Explain purchase frequency
-
-The source contains text such as:
-- Weekly
-- Fortnightly
-- Monthly
-- Quarterly
-- Annually
-
-I mapped these to approximate days:
-
-- Weekly → 7
-- Fortnightly → 14
-- Monthly → 30
-- Quarterly → 90
-- Annually → 365
-
-This converts a categorical frequency into a numerical feature that can be compared or used in future modeling.
-
-## 9. Explain customer segmentation
-
-I used `previous_purchases` as a simple behavioral segmentation signal:
-
-- 1–5 → New / Low-Repeat
+## 4. Feature engineering
+### Customer segment
+- 0–5 previous purchases → New / Low-Repeat
 - 6–20 → Returning
 - >20 → Loyal
 
-The purpose is not to claim a formal CRM segmentation model. It is a transparent rule-based segmentation that can be easily explained to business stakeholders.
-
-## 10. Why SQL after Python?
-
-Python is strong for cleaning and preparation.
-
-SQL is useful for answering repeatable business questions directly from a structured database.
-
-Using both demonstrates an end-to-end analytics workflow rather than relying on only one tool.
-
-## 11. SQL concepts you used
-
-Be ready to explain:
-
-### GROUP BY
-Groups rows by a business dimension.
-
-Example:
-`GROUP BY category`
-
-lets us calculate revenue separately for each product category.
-
-### SUM
-Used for total revenue.
-
-### AVG
-Used for average order value and ratings.
-
-### COUNT
-Used for transaction/customer counts.
-
-### CASE
-Used for rule-based customer segmentation.
-
-### CTE
-A Common Table Expression temporarily names an intermediate result, making a complex query easier to read.
-
-### Subquery
-Used when a calculation depends on another query result, such as comparing a transaction against the overall average purchase amount.
-
-### Window function
-I used `DENSE_RANK() OVER (PARTITION BY category ORDER BY revenue DESC)` to rank products inside each category.
-
-This is useful because a normal `ORDER BY` can give a global ranking, while the window function lets me rank separately within every category.
-
-## 12. Explain the top-3-products query
-
-The query first aggregates each product's performance within its category.
-
-Then:
-
-```sql
-DENSE_RANK() OVER (
-    PARTITION BY category
-    ORDER BY SUM(purchase_amount) DESC
-)
-```
-
-assigns a rank starting again from 1 for each category.
-
-Finally, I filter for ranks <= 3.
-
-This gives the top three products within every category.
-
-## 13. Explain discount analysis
-
-I compared:
-- number of discounted orders
-- revenue
-- average order value
-
-between discounted and non-discounted transactions.
-
-The important business point is that a discount should not automatically be considered successful simply because it generates orders. We should also examine order value and revenue contribution.
-
-## 14. Explain subscription analysis
-
-I compared subscribers and non-subscribers using:
-- number of records
-- total revenue
-- average order value
-- previous purchase history
-
-This helps identify whether subscription status is associated with stronger purchasing behavior.
-
-Important: this is an association analysis, not proof that subscriptions cause higher spending.
-
-## 15. Why Power BI?
-
-Power BI was used for the presentation layer because it allows:
-- interactive filtering
-- KPI cards
-- charts
-- category comparisons
-- customer segmentation views
-- business-friendly dashboards
-
-Python and SQL produce the analysis; Power BI makes the findings easier for stakeholders to consume.
-
-## 16. Recommended Power BI dashboard
-
-### Page 1 — Executive Overview
-KPI cards:
-- Total Revenue
-- Transactions
-- Average Order Value
-- Discounted Orders
-
-Charts:
-- Revenue by Category
-- Revenue by Season
-- Revenue by Gender
-- Revenue by Shipping Type
-
-Slicers:
-- Category
-- Season
-- Gender
-- Subscription Status
-
-### Page 2 — Customer Intelligence
-KPIs:
-- New / Low-Repeat
-- Returning
-- Loyal
-
-Charts:
-- Revenue by Customer Segment
-- Revenue by Age Group
-- Subscription vs Non-Subscription
-- Previous Purchases distribution
-
-### Page 3 — Product & Promotion
-Charts:
-- Top 10 Products by Revenue
-- Product Rating vs Revenue
-- Discount Rate by Product
-- Discounted vs Non-Discounted AOV
-
-## 17. Key numbers you should remember
-
-From the supplied dataset:
-
-- Records: **3,900**
-- Total revenue: **$233,081**
-- Average order value: **~$59.76**
-- Clothing revenue: **~$104.3K**
-- Accessories revenue: **~$74.2K**
-- Footwear revenue: **~$36.1K**
-- Outerwear revenue: **~$18.5K**
-- Fall revenue: **~$60.0K**
-- Missing review ratings before cleaning: **37**
-
-Do not memorize every number. Remember the main patterns and be able to explain how you calculated them.
-
-## 18. Important limitation
-
-Do NOT say:
-
-> "I calculated customer retention/churn."
-
-The dataset does not contain a longitudinal transaction history suitable for true retention or churn analysis.
-
-Say instead:
-
-> "I used previous purchase history as a proxy for customer behavioral segmentation."
-
-That answer is much more defensible.
-
-## 19. Likely interview questions
-
-### Q: What was the hardest part?
-**Answer:**
-> The main challenge was turning raw transaction fields into business-ready features and deciding which metrics were actually useful. I focused on transparent features such as purchase-history segments, age groups and purchase-frequency days.
-
-### Q: Why did you choose this project?
-> It covers the complete analytics workflow from data cleaning to SQL analysis and dashboarding, so it allowed me to demonstrate multiple practical analytics skills in one project.
-
-### Q: What business decision can your analysis support?
-> It can help prioritize products and categories, identify customer segments for retention campaigns, evaluate discount usage, and understand purchasing behavior across shipping, season and subscription dimensions.
-
-### Q: What would you improve?
-> I would add longitudinal transaction data and build cohort retention analysis. I would also add predictive modeling for repeat purchase or customer lifetime value once sufficient historical data is available.
-
-### Q: What would you do with more data?
-> I would build customer-level RFM features, cohort analysis, lifetime value estimation and potentially a churn or repeat-purchase prediction model.
-
-### Q: What is AOV?
-> Average Order Value. It is total purchase revenue divided by the number of transactions.
-
-### Q: What is the difference between revenue and average order value?
-> Revenue measures the total monetary value generated. AOV measures the average value of one transaction.
-
-### Q: Why use a dashboard?
-> A dashboard makes trends and comparisons easier to consume and allows non-technical stakeholders to filter and explore the data.
-
-## 20. If asked "Did you use AI?"
-
-Be honest about your actual usage. A safe explanation is:
-
-> "I used AI as a development assistant for brainstorming and debugging, but I reviewed and understood the data preparation, SQL logic, metrics and dashboard decisions myself."
-
-Do not claim that you personally wrote every line if that is not true.
-
-## 21. One-line project summary
-
-> **An end-to-end e-commerce analytics project using Python, SQL and Power BI to identify revenue drivers, customer segments, product opportunities and promotion patterns.**
+This is rule-based behavioral segmentation, not machine learning.
+
+### Value tier
+Current transaction amount is split into quartiles: Entry, Core, Premium and High Value. Quartiles are useful because they avoid arbitrary dollar thresholds and create similarly sized groups.
+
+### Promotion audience
+- Discounted Subscriber
+- Discounted Non-Subscriber
+- No Discount
+
+This lets the business compare promotion behavior across subscription status.
+
+## 5. Why Python?
+Python/Pandas is useful for reproducible cleaning, transformation, feature engineering and exploratory analysis.
+
+## 6. Why SQL?
+SQL makes the business questions repeatable once the cleaned data is loaded into a relational table.
+
+## 7. SQL concepts
+- `GROUP BY` for category/segment summaries
+- `SUM`, `AVG`, `COUNT` for KPIs
+- `CASE` for customer segments and promotion audiences
+- CTEs for readable multi-step analysis
+- Subqueries for comparisons with overall averages
+- `DENSE_RANK() OVER (PARTITION BY category ...)` for top products within each category
+- `percentile_cont` for quartile-based value tiers in PostgreSQL
+
+## 8. Power BI
+Power BI is the presentation layer. The dashboard story should focus on: executive KPIs, revenue concentration, customer intelligence, and product/promotion performance.
+
+## 9. Key business insights to discuss
+Do not memorize random numbers. Explain patterns and how they were calculated. Examples:
+- Which categories contribute the largest revenue share?
+- Which locations contribute the most revenue?
+- Which customer-history segment contributes the most revenue?
+- Does discounted AOV exceed non-discounted AOV?
+- Which products have both sufficient sales scale and strong ratings?
+- Which promotion audience has the highest AOV?
+
+## 10. Limitations
+The dataset is cross-sectional. `previous_purchases` is historical count, not a timestamped transaction table. Therefore I would not claim true churn, cohort retention, or causal effects of discounts/subscriptions. With longitudinal data I would add RFM, cohort retention, customer lifetime value and predictive modeling.
+
+## 11. Likely questions
+**Why did you use quartiles for value tiers?**
+> To avoid arbitrary fixed dollar thresholds and create balanced, interpretable transaction-value groups.
+
+**Is your customer segmentation machine learning?**
+> No. It is transparent rule-based segmentation using previous purchase history. A future version could use clustering if customer-level longitudinal data were available.
+
+**Why category-level median imputation?**
+> Ratings can differ by category, so category-level imputation preserves local distribution better than one global median.
+
+**What does your window function do?**
+> It restarts ranking inside each category, allowing me to return the top three products per category rather than the top three globally.
+
+**What would you improve next?**
+> Add longitudinal transactions, build RFM/cohort features, evaluate customer lifetime value and test repeat-purchase or churn prediction.
